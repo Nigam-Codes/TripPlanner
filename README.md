@@ -1,8 +1,11 @@
 # Trip Planner
 
-Search a city, set a radius, browse the sights inside it, add destinations hours away by
-name, and build a day-by-day itinerary with real walking / cycling / driving times — then
-share it as a read-only page.
+Two ways to plan a trip, both ending in a day-by-day itinerary with real walking /
+cycling / driving times that you can share as a read-only page:
+
+- **Explore a city** — search a city, set a radius, and browse everything touristy inside it.
+- **Plan a road trip** — no radius and no browsing; you name each stop and the route is
+  planned between exactly those.
 
 Runs entirely in the browser on free OpenStreetMap services. **No server, no database, no
 API keys, no accounts.**
@@ -31,17 +34,21 @@ npm run dev
 | Basemap | OpenFreeMap | Vector tiles, no key |
 | Storage | localStorage + IndexedDB | Trips in localStorage; API responses in IndexedDB |
 
-### Two ways to add a stop
+### The two modes
 
-**Within ~50 km — browse by radius.** The dashboard lists everything touristy inside the
-circle, ranked.
+**City mode** browses by radius. The dashboard lists everything touristy inside the
+circle, ranked. Radius discovery does not scale past about 50 km: an unfiltered Overpass
+query at 400 km takes ~90 s *and* still truncates at the element cap, so it returns an
+arbitrary slice rather than the best places. Above 25 km the app automatically restricts
+to places carrying a `wikidata` tag (i.e. notable ones), which is what keeps a 50 km
+search at ~13 s. A single far-flung stop can still be added by name from inside a city
+trip.
 
-**Anywhere further — search by name.** Radius discovery does not scale: an unfiltered
-Overpass query at 400 km takes ~90 s *and* still truncates at the element cap, so it
-returns an arbitrary slice rather than the best places. Above 25 km the app automatically
-restricts to places carrying a `wikidata` tag (i.e. notable ones), which is what keeps a
-50 km search at ~13 s. Beyond that, name the place instead — "Add a place by name" has no
-distance limit at all, so a stop 5–6 hours away is one search.
+**Road-trip mode** drops the radius entirely — no Overpass query is ever issued. You
+search for each stop by name, at any distance, and the map frames the stops themselves
+instead of a circle. It defaults to driving, and "Optimize" reorders the middle stops
+while letting you pin the start and the end, since a road trip usually has a fixed
+departure point and an open finish.
 
 ### Ranking
 

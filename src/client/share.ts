@@ -1,4 +1,4 @@
-import type { Mode, Place, PlannedTrip } from "@/lib/types";
+import type { Mode, Place, PlannedTrip, TripKind } from "@/lib/types";
 
 /**
  * Share links without a server.
@@ -42,6 +42,9 @@ type Payload = [
   radiusM: number,
   mode: Mode,
   days: DayTuple[],
+  // Appended after v1 shipped. Positional arrays tolerate a new trailing field, so
+  // links made before road-trip mode existed still decode — they just read as "city".
+  kind?: TripKind,
 ];
 
 /** Five decimals is ~1 m — more than enough to re-route, and shorter than a full float. */
@@ -76,6 +79,7 @@ function toPayload(plan: PlannedTrip): Payload {
         return tuple;
       }),
     ]),
+    plan.trip.kind,
   ];
 }
 
@@ -145,6 +149,7 @@ function place(t: StopTuple): Place {
 }
 
 export interface DecodedPlan {
+  kind: TripKind;
   title: string;
   cityName: string;
   cityLat: number;
@@ -168,10 +173,11 @@ export async function decodePlan(encoded: string): Promise<DecodedPlan | null> {
     const p = JSON.parse(json) as Payload;
     if (!Array.isArray(p) || p[0] !== VERSION) return null;
 
-    const [, title, cityName, cityLat, cityLon, radiusM, mode, days] = p;
+    const [, title, cityName, cityLat, cityLon, radiusM, mode, days, kind] = p;
     if (!Array.isArray(days)) return null;
 
     return {
+      kind: kind === "roadtrip" ? "roadtrip" : "city",
       title,
       cityName,
       cityLat,

@@ -2,7 +2,7 @@ import { buildSchedule } from "@/lib/schedule";
 import { optimizeOrder } from "@/lib/optimize";
 import { defaultDwell } from "@/lib/categories";
 import { getLegs, getMatrix } from "./providers/routing";
-import type { Mode, Place, PlannedTrip, ScheduledDay, TripSummary } from "@/lib/types";
+import type { Mode, Place, PlannedTrip, ScheduledDay, TripKind, TripSummary } from "@/lib/types";
 
 /**
  * Trip storage, replacing the SQLite service from the server build.
@@ -21,6 +21,8 @@ const MODES = new Set<Mode>(["foot", "bike", "car"]);
 
 const asMode = (v: string | null | undefined, fallback: Mode = "foot"): Mode =>
   v && MODES.has(v as Mode) ? (v as Mode) : fallback;
+
+const asKind = (v: string | null | undefined): TripKind => (v === "roadtrip" ? "roadtrip" : "city");
 
 interface StopRow {
   id: string;
@@ -42,6 +44,8 @@ interface DayRow {
 
 interface TripRow {
   id: string;
+  /** Absent on trips saved before road-trip mode existed; treated as "city". */
+  kind?: TripKind;
   title: string;
   cityName: string;
   cityLat: number;
@@ -100,19 +104,24 @@ export function createTrip(input: {
   cityLat: number;
   cityLon: number;
   radiusM?: number;
+  kind?: TripKind;
 }): string {
   const db = read();
   const tripId = id();
   const now = Date.now();
 
+  const kind = input.kind ?? "city";
+
   db.trips.push({
     id: tripId,
-    title: input.title ?? `Trip to ${input.cityName}`,
+    kind,
+    title: input.title ?? (kind === "roadtrip" ? `Road trip from ${input.cityName}` : `Trip to ${input.cityName}`),
     cityName: input.cityName,
     cityLat: input.cityLat,
     cityLon: input.cityLon,
     radiusM: input.radiusM ?? 3000,
-    defaultMode: "foot",
+    // A road trip is between towns, so driving is the only sensible default.
+    defaultMode: kind === "roadtrip" ? "car" : "foot",
     createdAt: now,
     updatedAt: now,
     days: [{ id: id(), dayIndex: 0, date: null, title: "Day 1", startTime: "09:00", stops: [] }],
@@ -141,6 +150,7 @@ export function getTripSummary(tripId: string): TripSummary | null {
     cityLon: t.cityLon,
     radiusM: t.radiusM,
     defaultMode: asMode(t.defaultMode),
+    kind: asKind(t.kind),
   };
 }
 
@@ -172,10 +182,29 @@ export function listTrips(): (TripSummary & { stopCount: number; updatedAt: numb
       cityLon: t.cityLon,
       radiusM: t.radiusM,
       defaultMode: asMode(t.defaultMode),
+      kind: asKind(t.kind),
       stopCount: t.days.reduce((n, d) => n + d.stops.length, 0),
       updatedAt: t.updatedAt,
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/**
+ * Create a road trip already seeded with its first stop, so the map has somewhere to
+ * point and the trip is immediately useful.
+ */
+export function createRoadTrip(first: Place, title?: string): string {
+  const tripId = createTrip({
+    kind: "roadtrip",
+    title,
+    cityName: first.name,
+    cityLat: first.lat,
+    cityLon: first.lon,
+  });
+
+  const dayId = read().trips.find((t) => t.id === tripId)!.days[0].id;
+  addStop(tripId, dayId, first);
+  return tripId;
 }
 
 /* ----------------------------------------------------------------------- days */
@@ -321,6 +350,7 @@ export async function planTrip(tripId: string): Promise<PlannedTrip | null> {
     cityLon: t.cityLon,
     radiusM: t.radiusM,
     defaultMode: asMode(t.defaultMode),
+    kind: asKind(t.kind),
   };
 
   const days: ScheduledDay[] = [];

@@ -75,7 +75,14 @@ export interface ScheduledDay {
   endTime: string;
 }
 
+/**
+ * "city" explores everything inside a radius; "roadtrip" has no radius at all and
+ * routes only between stops the user names explicitly.
+ */
+export type TripKind = "city" | "roadtrip";
+
 export interface TripSummary {
+  kind: TripKind;
   id: string;
   title: string;
   cityName: string;

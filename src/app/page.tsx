@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Map, ArrowRight } from "lucide-react";
+import { Map, ArrowRight, Building2, Route } from "lucide-react";
 import { CitySearch } from "@/components/CitySearch";
+import { RoadTripStart } from "@/components/RoadTripStart";
 import { listTrips } from "@/client/store";
 import { formatDistance } from "@/lib/geo";
 
@@ -11,6 +12,8 @@ export default function Home() {
   // localStorage is client-only, so the list fills in after hydration.
   const [trips, setTrips] = useState<ReturnType<typeof listTrips>>([]);
   useEffect(() => setTrips(listTrips()), []);
+
+  const [mode, setMode] = useState<"city" | "roadtrip">("city");
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
@@ -28,7 +31,28 @@ export default function Home() {
         </p>
       </header>
 
-      <CitySearch />
+      <div className="mb-4 inline-flex rounded-lg border border-line bg-surface p-1">
+        {(
+          [
+            ["city", "Explore a city", Building2],
+            ["roadtrip", "Plan a road trip", Route],
+          ] as const
+        ).map(([value, label, Icon]) => (
+          <button
+            key={value}
+            onClick={() => setMode(value)}
+            aria-pressed={mode === value}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              mode === value ? "bg-ink text-white" : "text-muted hover:text-ink"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "city" ? <CitySearch /> : <RoadTripStart />}
 
       {trips.length > 0 ? (
         <section className="mt-14">
@@ -45,8 +69,16 @@ export default function Home() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{t.title}</span>
                     <span className="block text-sm text-muted">
-                      {t.cityName} · {t.stopCount} {t.stopCount === 1 ? "stop" : "stops"} ·{" "}
-                      {formatDistance(t.radiusM)} radius
+                      {t.kind === "roadtrip" ? (
+                        <>
+                          Road trip · {t.stopCount} {t.stopCount === 1 ? "stop" : "stops"}
+                        </>
+                      ) : (
+                        <>
+                          {t.cityName} · {t.stopCount} {t.stopCount === 1 ? "stop" : "stops"} ·{" "}
+                          {formatDistance(t.radiusM)} radius
+                        </>
+                      )}
                     </span>
                   </span>
                   <ArrowRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />

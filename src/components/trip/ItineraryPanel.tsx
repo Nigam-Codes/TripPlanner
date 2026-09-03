@@ -53,10 +53,15 @@ export interface ItineraryPanelProps {
   onShare: () => void;
   onHover: (placeId: string | null) => void;
   onAddPlace: (place: Place) => void;
+  roadTrip?: boolean;
+  pinStart?: boolean;
+  pinEnd?: boolean;
+  onPinStart?: (v: boolean) => void;
+  onPinEnd?: (v: boolean) => void;
 }
 
 export function ItineraryPanel(props: ItineraryPanelProps) {
-  const { plan, day, busy, savedNotice } = props;
+  const { plan, day, busy, savedNotice, roadTrip = false } = props;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -140,7 +145,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onClick={() => props.onOptimize(day.dayId)}
             disabled={day.stops.length < 3 || busy !== null}
             title={
-              day.stops.length < 3 ? "Add at least three stops to optimize" : "Reorder to cut travel time"
+              day.stops.length < 3
+                ? "Add at least three stops to optimize"
+                : roadTrip
+                  ? "Reorder the middle stops to cut driving time"
+                  : "Reorder to cut travel time"
             }
             className="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 font-medium text-muted transition hover:border-accent hover:text-accent disabled:opacity-40"
           >
@@ -161,6 +170,28 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           </button>
         </div>
 
+        {roadTrip && day.stops.length >= 3 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
+            <span>When optimizing, keep:</span>
+            {(
+              [
+                ["Start", props.pinStart ?? true, props.onPinStart],
+                ["End", props.pinEnd ?? false, props.onPinEnd],
+              ] as const
+            ).map(([label, checked, onChange]) => (
+              <label key={label} className="inline-flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => onChange?.(e.target.checked)}
+                  className="accent-teal-600"
+                />
+                {label} fixed
+              </label>
+            ))}
+          </div>
+        ) : null}
+
         {savedNotice ? (
           <p className="mt-2 rounded-md bg-accent/10 px-2.5 py-1.5 text-xs text-accent">
             {savedNotice}
@@ -171,8 +202,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-3">
         {day.stops.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted">
-            No stops yet. Add places from the list on the left, click a dot on the map, or
-            search for somewhere by name below.
+            {roadTrip
+              ? "No stops yet. Search for each place you want to visit below — there is no distance limit."
+              : "No stops yet. Add places from the list on the left, click a dot on the map, or search for somewhere by name below."}
           </p>
         ) : (
           <DndContext

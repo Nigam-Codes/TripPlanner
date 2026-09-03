@@ -20,13 +20,27 @@ import type { PlannedTrip } from "@/lib/types";
 export default function SharedPage() {
   const [plan, setPlan] = useState<PlannedTrip | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "invalid">("loading");
+  const [hash, setHash] = useState("");
+
+  // Opening a second share link in the same tab only changes the fragment, which
+  // does not remount the page. Without this the viewer keeps seeing the old plan.
+  useEffect(() => {
+    const read = () => setHash(window.location.hash.slice(1));
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     void (async () => {
-      const encoded = window.location.hash.slice(1);
-      if (!encoded) return setState("invalid");
+      const encoded = hash;
+      if (!encoded) return;
+      setState("loading");
 
       const decoded = await decodePlan(encoded);
+      if (cancelled) return;
       if (!decoded) return setState("invalid");
 
       document.title = `${decoded.title} — Trip Planner`;
@@ -57,6 +71,7 @@ export default function SharedPage() {
         );
       }
 
+      if (cancelled) return;
       setPlan({
         trip: {
           id: "shared",
@@ -66,12 +81,17 @@ export default function SharedPage() {
           cityLon: decoded.cityLon,
           radiusM: decoded.radiusM,
           defaultMode: decoded.mode,
+          kind: decoded.kind,
         },
         days,
       });
       setState("ready");
     })();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hash]);
 
   if (state === "loading") {
     return (

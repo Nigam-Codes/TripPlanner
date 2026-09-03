@@ -108,6 +108,7 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
             onSelectPlace={setSelected}
             onAddPlace={() => {}}
             readOnly
+            fitToStops={plan.trip.kind === "roadtrip"}
           />
         </div>
 

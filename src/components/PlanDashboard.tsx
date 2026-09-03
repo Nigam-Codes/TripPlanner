@@ -37,6 +37,9 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // A road trip usually has a fixed departure point; the finish is often open.
+  const [pinStart, setPinStart] = useState(true);
+  const [pinEnd, setPinEnd] = useState(false);
 
   /* ------------------------------------------------------------------ loading */
 
@@ -59,6 +62,9 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
     })();
   }, [refresh]);
 
+  const isRoadTrip = plan?.trip.kind === "roadtrip";
+  const stopCount = plan?.days.reduce((n, d) => n + d.stops.length, 0) ?? 0;
+
   const day = useMemo(
     () => plan?.days.find((d) => d.dayId === activeDayId) ?? plan?.days[0] ?? null,
     [plan, activeDayId],
@@ -77,6 +83,12 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
   // Debounced so dragging the radius slider does not fire an Overpass query per pixel —
   // the public instance allows only two concurrent slots.
   useEffect(() => {
+    // A road trip has no radius and no browsing, so it never queries Overpass.
+    if (isRoadTrip) {
+      setPlaces([]);
+      setLoading(false);
+      return;
+    }
     if (cityLat == null || cityLon == null) return;
     let cancelled = false;
 
@@ -100,7 +112,7 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [cityLat, cityLon, radius, categories]);
+  }, [cityLat, cityLon, radius, categories, isRoadTrip]);
 
   const visiblePlaces = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -155,7 +167,10 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
       if (!plan) return;
       let saved = 0;
       await act("optimize", async () => {
-        ({ savedSec: saved } = await store.optimizeDay(tripId, dayId, plan.trip.defaultMode));
+        ({ savedSec: saved } = await store.optimizeDay(tripId, dayId, plan.trip.defaultMode, {
+          pinStart: isRoadTrip ? pinStart : false,
+          pinEnd: isRoadTrip ? pinEnd : false,
+        }));
       });
       flash(
         saved > 0
@@ -163,7 +178,7 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
           : "Already the shortest order found.",
       );
     },
-    [act, flash, plan, tripId],
+    [act, flash, plan, tripId, isRoadTrip, pinStart, pinEnd],
   );
 
   const share = useCallback(async () => {
@@ -207,10 +222,13 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold">{plan.trip.title}</h1>
           <p className="text-xs text-muted">
-            {plan.trip.cityName} · {formatDistance(radius)} radius
+            {isRoadTrip
+              ? `Road trip · ${stopCount} ${stopCount === 1 ? "stop" : "stops"}`
+              : `${plan.trip.cityName} · ${formatDistance(radius)} radius`}
           </p>
         </div>
 
+        {isRoadTrip ? null : (
         <label className="ml-auto flex items-center gap-2 text-xs text-muted">
           Radius
           <input
@@ -240,9 +258,10 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
           km
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
         </label>
+        )}
       </header>
 
-      {radius > NOTABLE_ONLY_ABOVE_M ? (
+      {!isRoadTrip && radius > NOTABLE_ONLY_ABOVE_M ? (
         <p className="flex items-center justify-center gap-1.5 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           Beyond {formatDistance(NOTABLE_ONLY_ABOVE_M)}, only notable places are listed so the
@@ -250,8 +269,16 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
         </p>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_1fr_360px]">
-        <aside className="hidden min-h-0 border-r border-line bg-surface lg:block">
+      <div
+        className={`grid min-h-0 flex-1 grid-cols-1 ${
+          isRoadTrip ? "lg:grid-cols-[1fr_380px]" : "lg:grid-cols-[340px_1fr_360px]"
+        }`}
+      >
+        <aside
+          className={`min-h-0 border-r border-line bg-surface ${
+            isRoadTrip ? "hidden" : "hidden lg:block"
+          }`}
+        >
           <PoiPanel
             places={visiblePlaces}
             loading={loading}
@@ -283,6 +310,7 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
             stopPlaceIds={stopPlaceIds}
             onSelectPlace={setSelected}
             onAddPlace={addPlace}
+            fitToStops={isRoadTrip}
           />
         </div>
 
@@ -310,6 +338,11 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
             onShare={share}
             onHover={setHovered}
             onAddPlace={addPlace}
+            roadTrip={isRoadTrip}
+            pinStart={pinStart}
+            pinEnd={pinEnd}
+            onPinStart={setPinStart}
+            onPinEnd={setPinEnd}
           />
         </aside>
       </div>

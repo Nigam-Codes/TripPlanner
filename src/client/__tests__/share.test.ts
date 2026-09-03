@@ -50,9 +50,10 @@ function day(stops: Place[], over: Partial<ScheduledDay> = {}): ScheduledDay {
   };
 }
 
-function plan(days: ScheduledDay[]): PlannedTrip {
+function plan(days: ScheduledDay[], kind: "city" | "roadtrip" = "city"): PlannedTrip {
   return {
     trip: {
+      kind,
       id: "t1",
       title: "Trip to Kyoto",
       cityName: "Kyoto",
@@ -121,6 +122,14 @@ describe("share link round-trip", () => {
     const decoded = await decodePlan(await encodePlan(original));
     expect(decoded!.days.map((d) => d.startTime)).toEqual(["09:00", "10:30"]);
     expect(decoded!.days[1].stops[0].place.name).toBe("Nijo Castle");
+  });
+
+  it("carries the trip kind, defaulting old links to city", async () => {
+    const road = await decodePlan(await encodePlan(plan([day([place()])], "roadtrip")));
+    expect(road!.kind).toBe("roadtrip");
+
+    const city = await decodePlan(await encodePlan(plan([day([place()])])));
+    expect(city!.kind).toBe("city");
   });
 
   it("stays short enough for a URL", async () => {

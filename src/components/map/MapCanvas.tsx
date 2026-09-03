@@ -40,6 +40,11 @@ export interface MapCanvasProps {
   onAddPlace: (place: Place) => void;
   /** Public share pages pass this so no add affordance can ever be rendered. */
   readOnly?: boolean;
+  /**
+   * Road trips have no search radius, so there is no circle to draw and nothing
+   * sensible to frame except the stops themselves.
+   */
+  fitToStops?: boolean;
 }
 
 export function MapCanvas({
@@ -53,13 +58,45 @@ export function MapCanvas({
   onSelectPlace,
   onAddPlace,
   readOnly = false,
+  fitToStops = false,
 }: MapCanvasProps) {
   const mapRef = useRef<MapRef>(null);
 
-  // Keep the circle in view when the centre or radius changes.
+  // Frame the stops themselves when there is no radius. Recomputed from the stop
+  // coordinates rather than the stop list identity, so re-planning a day (which
+  // rebuilds the objects) does not re-animate the camera on every keystroke.
+  const stopBounds = useMemo(() => {
+    if (!fitToStops) return null;
+    const pts = (day?.stops ?? []).map((s) => [s.place.lon, s.place.lat] as [number, number]);
+    if (pts.length === 0) return null;
+
+    const lons = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
+    return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)].join(",");
+  }, [fitToStops, day]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
+    if (fitToStops) {
+      if (!stopBounds) return;
+      const [w, s, e, n] = stopBounds.split(",").map(Number);
+      // A single stop has zero extent; fitBounds on that would zoom to maximum.
+      if (w === e && s === n) {
+        map.easeTo({ center: [w, s], zoom: 11, duration: 600 });
+        return;
+      }
+      map.fitBounds(
+        [
+          [w, s],
+          [e, n],
+        ],
+        { padding: 80, duration: 600, maxZoom: 14 },
+      );
+      return;
+    }
+
     const latPad = (radiusM * 1.25) / 111_320;
     const lonPad = (radiusM * 1.25) / (111_320 * Math.cos((centre.lat * Math.PI) / 180));
     map.fitBounds(
@@ -69,7 +106,7 @@ export function MapCanvas({
       ],
       { padding: 40, duration: 600 },
     );
-  }, [centre.lat, centre.lon, radiusM]);
+  }, [centre.lat, centre.lon, radiusM, fitToStops, stopBounds]);
 
   const circle = useMemo(
     () => circlePolygon(centre.lat, centre.lon, radiusM),
@@ -136,6 +173,7 @@ export function MapCanvas({
     >
       <NavigationControl position="top-right" showCompass={false} />
 
+      {fitToStops ? null : (
       <Source id="radius" type="geojson" data={circle}>
         <Layer id="radius-fill" type="fill" paint={{ "fill-color": "#0d9488", "fill-opacity": 0.05 }} />
         <Layer
@@ -144,6 +182,7 @@ export function MapCanvas({
           paint={{ "line-color": "#0d9488", "line-width": 1.5, "line-dasharray": [3, 2] }}
         />
       </Source>
+      )}
 
       <Source id="route" type="geojson" data={routeFc}>
         <Layer
