@@ -84,6 +84,21 @@ walking-first planner built on it would silently show driving times labelled "wa
 The FOSSGIS instances run a separate graph per mode; the profile segment in the URL path
 is always the literal `driving` and the *host* selects the mode.
 
+### Exporting a PDF
+
+"PDF" in the planner and "Export PDF" on a shared plan open a dialog listing every day
+with a checkbox — export the whole trip, or just the days you want to hand someone.
+Descriptions and photos are optional toggles.
+
+Printing swaps the document rather than restyling the app: the on-screen UI is a
+three-pane flex layout with independently scrolling children, which browsers paginate
+very badly, so `PrintableItinerary` renders a plain linear document from the selected
+days and the print stylesheet hides the app. Each day after the first starts on a fresh
+page, and a stop stays with the leg that leads to it.
+
+Stops added by name are enriched in the background, so a road trip built entirely from
+search still exports with descriptions and photos rather than bare names.
+
 ### Share links
 
 There is no server, so a plan travels inside the URL fragment. To keep links short it

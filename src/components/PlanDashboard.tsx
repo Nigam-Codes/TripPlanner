@@ -10,8 +10,11 @@ import { CATEGORY_IDS } from "@/lib/categories";
 import { NOTABLE_ONLY_ABOVE_M } from "@/lib/osm";
 import { formatDistance, formatDuration } from "@/lib/geo";
 import { findPlaces } from "@/client/providers/places";
-import { enrichPlaces } from "@/client/providers/enrich";
+import { enrichPlaces, hydratePlaces } from "@/client/providers/enrich";
 import { encodePlan } from "@/client/share";
+import { ExportDialog } from "@/components/print/ExportDialog";
+import { PrintableItinerary } from "@/components/print/PrintableItinerary";
+import { usePrintExport } from "@/components/print/usePrintExport";
 import { BASE_PATH } from "@/lib/basePath";
 import * as store from "@/client/store";
 import type { Mode, Place, PlannedTrip } from "@/lib/types";
@@ -37,6 +40,8 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const { printOptions, startPrint } = usePrintExport();
   // A road trip usually has a fixed departure point; the finish is often open.
   const [pinStart, setPinStart] = useState(true);
   const [pinEnd, setPinEnd] = useState(false);
@@ -128,6 +133,48 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
     return sorted;
   }, [places, query, sort]);
 
+  /* --------------------------------------------------------------- enrichment */
+
+  // Places added by name skip discovery, so they arrive with no description or photo.
+  // Road trips are built entirely that way, which would otherwise leave every stop
+  // bare — in the planner and in the exported PDF.
+  //
+  // The attempted set is what stops this looping: a place with a wikidata id but no
+  // English article never gains a description, so without it the effect would refetch
+  // on every re-plan.
+  const hydrationAttempted = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!plan) return;
+
+    const pending = plan.days
+      .flatMap((day) => day.stops.map((s) => s.place))
+      .filter((p) => p.wikidata && !p.description && !hydrationAttempted.current.has(p.id));
+
+    if (pending.length === 0) return;
+    for (const p of pending) hydrationAttempted.current.add(p.id);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const hydrated = await hydratePlaces(pending);
+        if (cancelled) return;
+
+        const gained = hydrated.filter((p) => p.description || p.imageUrl);
+        if (gained.length === 0) return;
+
+        store.savePlaces(gained);
+        await refresh();
+      } catch {
+        // Enrichment is decoration; a failure must not disturb the itinerary.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [plan, refresh]);
+
   /* ---------------------------------------------------------------- mutations */
 
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -214,7 +261,8 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <>
+    <div className="screen-only flex h-screen flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
         <Link href="/" className="text-muted transition hover:text-ink" aria-label="All trips">
           <ArrowLeft className="h-4 w-4" />
@@ -336,6 +384,7 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
             }
             onOptimize={optimize}
             onShare={share}
+            onExport={() => setExportOpen(true)}
             onHover={setHovered}
             onAddPlace={addPlace}
             roadTrip={isRoadTrip}
@@ -348,7 +397,21 @@ export function PlanDashboard({ tripId }: { tripId: string }) {
       </div>
 
       {shareUrl ? <ShareDialog url={shareUrl} onClose={() => setShareUrl(null)} /> : null}
+
+      {exportOpen ? (
+        <ExportDialog
+          plan={plan}
+          onClose={() => setExportOpen(false)}
+          onExport={(opts) => {
+            setExportOpen(false);
+            startPrint(opts);
+          }}
+        />
+      ) : null}
     </div>
+
+    {printOptions ? <PrintableItinerary plan={plan} options={printOptions} /> : null}
+    </>
   );
 }
 

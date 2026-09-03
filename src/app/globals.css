@@ -42,15 +42,50 @@
   }
 }
 
-/* The share page is meant to be printed or saved as PDF for a trip binder. */
+/*
+ * Printing swaps the whole document rather than restyling the app.
+ *
+ * The on-screen UI is a three-pane flex layout with its own scroll containers, which
+ * paginates badly; the printable block is a plain linear document built only from the
+ * days the user selected. Toggling two classes is also far more robust than trying to
+ * hide the app pane by pane.
+ */
+.print-only {
+  display: none;
+}
+
 @media print {
+  .screen-only,
   .no-print {
     display: none !important;
   }
+
+  .print-only {
+    display: block !important;
+  }
+
+  @page {
+    margin: 14mm;
+  }
+
+  html,
   body {
+    height: auto;
     background: #fff;
   }
+
+  /* Keep a stop and the leg leading to it on the same page. */
   .print-break {
     break-inside: avoid;
+  }
+
+  .page-break-before {
+    break-before: page;
+  }
+
+  /* Printers drop backgrounds by default, which would erase the stop numbers. */
+  .print-ink {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

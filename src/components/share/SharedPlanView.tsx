@@ -6,7 +6,10 @@ import { categoryLabel } from "@/lib/categories";
 import { formatDistance, formatDuration } from "@/lib/geo";
 import { MODE_LABEL } from "@/lib/types";
 import type { PlannedTrip } from "@/lib/types";
-import { Clock, Footprints, Bike, Car, AlertTriangle, Printer, MapPin } from "lucide-react";
+import { Clock, Footprints, Bike, Car, AlertTriangle, FileDown, MapPin } from "lucide-react";
+import { ExportDialog } from "@/components/print/ExportDialog";
+import { PrintableItinerary } from "@/components/print/PrintableItinerary";
+import { usePrintExport } from "@/components/print/usePrintExport";
 
 const MODE_ICON = { foot: Footprints, bike: Bike, car: Car } as const;
 
@@ -20,6 +23,8 @@ const MODE_ICON = { foot: Footprints, bike: Bike, car: Car } as const;
 export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
   const [activeDayId, setActiveDayId] = useState(plan.days[0]?.dayId ?? "");
   const [selected, setSelected] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const { printOptions, startPrint } = usePrintExport();
 
   const day = useMemo(
     () => plan.days.find((d) => d.dayId === activeDayId) ?? plan.days[0] ?? null,
@@ -37,7 +42,7 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
 
   if (!day) {
     return (
-      <main className="mx-auto max-w-2xl p-16 text-center text-muted">
+      <main className="screen-only mx-auto max-w-2xl p-16 text-center text-muted">
         This plan has no stops yet.
       </main>
     );
@@ -46,7 +51,8 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
   const ModeIcon = MODE_ICON[plan.trip.defaultMode];
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8">
+    <>
+    <main className="screen-only mx-auto max-w-6xl px-5 py-8">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium tracking-wide text-accent uppercase">Trip plan</p>
@@ -70,11 +76,11 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
         </div>
 
         <button
-          onClick={() => window.print()}
+          onClick={() => setExportOpen(true)}
           className="no-print inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
         >
-          <Printer className="h-4 w-4" />
-          Print / PDF
+          <FileDown className="h-4 w-4" />
+          Export PDF
         </button>
       </header>
 
@@ -214,6 +220,20 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
         (ODbL). Descriptions and images from Wikipedia (CC BY-SA). Routing by the FOSSGIS OSRM
         service.
       </footer>
+
+      {exportOpen ? (
+        <ExportDialog
+          plan={plan}
+          onClose={() => setExportOpen(false)}
+          onExport={(opts) => {
+            setExportOpen(false);
+            startPrint(opts);
+          }}
+        />
+      ) : null}
     </main>
+
+    {printOptions ? <PrintableItinerary plan={plan} options={printOptions} /> : null}
+    </>
   );
 }

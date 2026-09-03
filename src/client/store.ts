@@ -423,6 +423,14 @@ export async function optimizeDay(
   return { savedSec };
 }
 
+/** Persist enriched copies of places already referenced by a trip. */
+export function savePlaces(places: Place[]): void {
+  if (places.length === 0) return;
+  const db = read();
+  for (const p of places) db.places[p.id] = p;
+  write(db);
+}
+
 /* ------------------------------------------------------------------- portability */
 
 /** localStorage is not synced between devices, so offer a manual escape hatch. */

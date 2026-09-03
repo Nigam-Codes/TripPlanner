@@ -29,6 +29,7 @@ import {
   Footprints,
   Bike,
   Car,
+  FileDown,
 } from "lucide-react";
 import { AddPlaceSearch } from "./AddPlaceSearch";
 import { formatDistance, formatDuration } from "@/lib/geo";
@@ -51,6 +52,7 @@ export interface ItineraryPanelProps {
   onSetDwell: (stopId: string, minutes: number) => void;
   onOptimize: (dayId: string) => void;
   onShare: () => void;
+  onExport: () => void;
   onHover: (placeId: string | null) => void;
   onAddPlace: (place: Place) => void;
   roadTrip?: boolean;
@@ -162,8 +164,17 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           </button>
 
           <button
+            onClick={props.onExport}
+            title="Export selected days as PDF"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-1.5 font-medium text-muted transition hover:border-accent hover:text-accent"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            PDF
+          </button>
+
+          <button
             onClick={props.onShare}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 font-medium text-accent-fg transition hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 font-medium text-accent-fg transition hover:opacity-90"
           >
             <Share2 className="h-3.5 w-3.5" />
             Share
