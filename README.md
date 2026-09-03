@@ -71,42 +71,35 @@ revoked or updated** — editing a trip produces a new link.
 
 ## Deploying
 
-The site is a static export deployed from the `gh-pages` branch.
-
-```bash
-npm run deploy
-```
-
-That builds with `NEXT_PUBLIC_BASE_PATH=/TripPlanner` and pushes `out/` to `gh-pages`.
+Pushing to `main` builds and publishes the site automatically via
+`.github/workflows/deploy.yml` (GitHub Pages source: GitHub Actions). There is no manual
+publish step.
 
 Three things silently break a Next static export on GitHub Pages, all handled here:
 
-1. **`public/.nojekyll`** — without it, Pages' Jekyll step ignores the `_next/` directory
-   (leading underscore) and every asset 404s.
+1. **`public/.nojekyll`** — without it, Pages runs Jekyll, which ignores the `_next/`
+   directory (leading underscore) and every asset 404s. This bit us once during setup:
+   the first deploy served a Jekyll-rendered README instead of the app.
 2. **`basePath`** — a project site lives under `/<repo>/`, so `basePath` and `assetPrefix`
-   come from `NEXT_PUBLIC_BASE_PATH`, defaulting to `""` for local dev.
-3. **The maplibre worker URL must include the basePath** — see below.
+   come from `NEXT_PUBLIC_BASE_PATH` (set to `/${{ github.event.repository.name }}` in CI),
+   defaulting to `""` for local dev.
+3. **The maplibre worker URL must include the basePath**, or the map renders markers on a
+   blank canvas.
 
-> On Windows, Git Bash rewrites a leading `/` into a Windows path. `npm run deploy` sets
-> `MSYS_NO_PATHCONV=1` to prevent `/TripPlanner` becoming `C:/Program Files/Git/TripPlanner`.
-
-### Optional: deploy on push via Actions
-
-`.github/workflows/deploy.yml` is included but pushing it requires the `workflow` OAuth
-scope, which a default `gh auth login` does not grant:
+To reproduce a production build locally:
 
 ```bash
-gh auth refresh -s workflow
+NEXT_PUBLIC_BASE_PATH=/TripPlanner npm run build
 ```
 
-Then push the file and set Pages → Source → GitHub Actions.
+> On Windows, Git Bash rewrites a leading `/` into a Windows path — prefix the command with
+> `MSYS_NO_PATHCONV=1` or `/TripPlanner` becomes `C:/Program Files/Git/TripPlanner`.
 
 ## Scripts
 
 ```bash
 npm run dev      # dev server
 npm run build    # static export to out/
-npm run deploy   # build with basePath and publish to gh-pages
 npm test         # 37 unit tests
 ```
 

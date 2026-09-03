@@ -9,3 +9,4 @@ data/*.db-shm
 *.tsbuildinfo
 next-env.d.ts
 .preview/
+.gh-pages-worktree/
