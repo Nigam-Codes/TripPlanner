@@ -123,6 +123,39 @@ describe("buildSchedule", () => {
     expect(day.stops[0].arrival).toBe("09:00");
   });
 
+  it("marks stops that fall past midnight", () => {
+    // A 12-hour driving leg is ordinary on a road trip; "03:14" with no further
+    // marking reads as the same morning the day started.
+    const day = buildSchedule({
+      ...base,
+      stops: [
+        { stopId: "a", place: place(), dwellMinutes: 60, mode: "car", legFromPrevious: null },
+        { stopId: "b", place: place(), dwellMinutes: 60, mode: "car", legFromPrevious: leg(12 * 60) },
+      ],
+    });
+
+    expect(day.stops[0].dayOffset).toBe(0);
+    expect(day.stops[1].arrival).toBe("22:00");
+    expect(day.stops[1].dayOffset).toBe(0);
+    expect(day.endTime).toBe("23:00");
+    expect(day.endDayOffset).toBe(0);
+  });
+
+  it("counts each midnight crossed", () => {
+    const day = buildSchedule({
+      ...base,
+      stops: [
+        { stopId: "a", place: place(), dwellMinutes: 30, mode: "car", legFromPrevious: null },
+        { stopId: "b", place: place(), dwellMinutes: 30, mode: "car", legFromPrevious: leg(20 * 60) },
+        { stopId: "c", place: place(), dwellMinutes: 30, mode: "car", legFromPrevious: leg(24 * 60) },
+      ],
+    });
+
+    expect(day.stops[1].dayOffset).toBe(1); // 09:00 + 30m + 20h -> next day
+    expect(day.stops[2].dayOffset).toBe(2);
+    expect(day.endDayOffset).toBe(2);
+  });
+
   it("copes with an empty day", () => {
     const day = buildSchedule({ ...base, stops: [] });
     expect(day.stops).toEqual([]);

@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Plus, Check, Star, ExternalLink } from "lucide-react";
-import { CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
+import { DISCOVERABLE_CATEGORIES, categoryColor, categoryLabel } from "@/lib/categories";
 import { formatDistance } from "@/lib/geo";
 import type { Place } from "@/lib/types";
 
@@ -52,7 +52,7 @@ export function PoiPanel({
         />
 
         <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((c) => {
+          {DISCOVERABLE_CATEGORIES.map((c) => {
             const on = activeCategories.includes(c.id);
             return (
               <button

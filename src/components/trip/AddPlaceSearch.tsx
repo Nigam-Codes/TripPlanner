@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Search, Loader2, Plus, X } from "lucide-react";
 import { searchPlaces, type PlaceSearchResult } from "@/client/providers/placeSearch";
+import { categoryColor } from "@/lib/categories";
 import { formatDistance } from "@/lib/geo";
 import type { LatLon, Place } from "@/lib/types";
 
@@ -75,7 +76,7 @@ export function AddPlaceSearch({
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Sintra, Évora, Cabo da Roca…"
+          placeholder="Lake Tahoe, Yosemite, Angels Landing…"
           aria-label="Place name"
           className="min-w-0 flex-1 rounded border border-line bg-surface px-2 py-1.5 text-xs outline-none focus:border-accent"
         />
@@ -96,6 +97,12 @@ export function AddPlaceSearch({
       ) : null}
 
       {results && results.length > 0 ? (
+        <p className="mt-2 text-[11px] text-muted">
+          Parks, lakes, trails, peaks, bridges and towns all work — pick the type you meant.
+        </p>
+      ) : null}
+
+      {results && results.length > 0 ? (
         <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto rounded border border-line bg-surface">
           {results.map((r) => (
             <li key={r.place.id}>
@@ -106,11 +113,20 @@ export function AddPlaceSearch({
                 }}
                 className="w-full px-2.5 py-2 text-left transition hover:bg-canvas"
               >
-                <span className="block text-xs font-medium">{r.place.name}</span>
-                <span className="block truncate text-[11px] text-muted">{r.context}</span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: categoryColor(r.place.category) }}
+                  />
+                  <span className="truncate text-xs font-medium">{r.place.name}</span>
+                  <span className="shrink-0 rounded bg-canvas px-1.5 py-px text-[10px] text-muted">
+                    {r.typeLabel}
+                  </span>
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-muted">{r.context}</span>
                 {r.distance != null ? (
                   <span className="text-[11px] text-accent">
-                    {formatDistance(r.distance)} from {"the city centre"}
+                    {formatDistance(r.distance)} away
                   </span>
                 ) : null}
               </button>

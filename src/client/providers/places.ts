@@ -1,6 +1,6 @@
 import { getOrFetch, DAY_MS } from "../cache";
 import { politeFetch } from "../limiter";
-import { CATEGORIES } from "@/lib/categories";
+import { DISCOVERABLE_CATEGORIES } from "@/lib/categories";
 import { buildOverpassQuery, normalizeElements, type OverpassElement } from "@/lib/osm";
 import type { Place } from "@/lib/types";
 
@@ -12,7 +12,9 @@ export async function findPlaces(
   radiusM: number,
   categoryIds?: string[],
 ): Promise<Place[]> {
-  const cats = (categoryIds?.length ? categoryIds : CATEGORIES.map((c) => c.id)).slice().sort();
+  const cats = (categoryIds?.length ? categoryIds : DISCOVERABLE_CATEGORIES.map((c) => c.id))
+    .slice()
+    .sort();
   // Round the centre so small map nudges reuse the cached result.
   const key = `overpass:${lat.toFixed(3)},${lon.toFixed(3)}:${Math.round(radiusM)}:${cats.join(",")}`;
 

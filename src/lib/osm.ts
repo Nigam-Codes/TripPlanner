@@ -1,4 +1,4 @@
-import { CATEGORIES, classify } from './categories';
+import { CATEGORIES, DISCOVERABLE_CATEGORIES, classify } from './categories';
 import { haversine } from './geo';
 import type { Place } from './types';
 
@@ -22,7 +22,7 @@ export function buildOverpassQuery(
   lat: number,
   lon: number,
   radiusM: number,
-  categoryIds: string[] = CATEGORIES.map((c) => c.id),
+  categoryIds: string[] = DISCOVERABLE_CATEGORIES.map((c) => c.id),
   /**
    * Restrict to features carrying a `wikidata` tag. At road-trip radii the
    * unfiltered query hits the element cap and returns an arbitrary slice; requiring

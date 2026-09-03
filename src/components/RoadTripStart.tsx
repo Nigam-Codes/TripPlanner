@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, MapPin } from "lucide-react";
 import { searchPlaces, type PlaceSearchResult } from "@/client/providers/placeSearch";
 import { createRoadTrip } from "@/client/store";
+import { categoryColor } from "@/lib/categories";
 
 /**
  * Start a road trip from its first stop.
@@ -58,7 +59,7 @@ export function RoadTripStart() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Where does the trip start? — Lisbon, Denver, Queenstown…"
+            placeholder="Where does the trip start? — a town, park, lake or trailhead"
             aria-label="First stop"
             className="w-full rounded-lg border border-line bg-surface py-3 pr-3 pl-10 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
@@ -75,7 +76,7 @@ export function RoadTripStart() {
 
       <p className="mt-2 text-sm text-muted">
         No radius, no browsing — you pick every stop, and the route is planned between
-        exactly those.
+        exactly those. Towns, national parks, lakes, trails, peaks and bridges all work.
       </p>
 
       {error ? (
@@ -95,9 +96,18 @@ export function RoadTripStart() {
                 disabled={creating !== null}
                 className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-canvas disabled:opacity-50"
               >
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+                <MapPin
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                  style={{ color: categoryColor(r.place.category) }}
+                  aria-hidden
+                />
                 <span className="min-w-0">
-                  <span className="block font-medium">{r.place.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="truncate font-medium">{r.place.name}</span>
+                    <span className="shrink-0 rounded bg-canvas px-1.5 py-px text-[11px] text-muted">
+                      {r.typeLabel}
+                    </span>
+                  </span>
                   <span className="block truncate text-sm text-muted">{r.context}</span>
                 </span>
                 {creating === r.place.id ? (

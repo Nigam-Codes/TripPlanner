@@ -59,6 +59,8 @@ export interface ScheduledStop {
   legFromPrevious: Leg | null;
   arrival: string; // "HH:MM"
   departure: string; // "HH:MM"
+  /** Midnights crossed before arriving. 0 for same day, 1 for the next, etc. */
+  dayOffset: number;
   closedWarning: string | null;
 }
 
@@ -73,6 +75,8 @@ export interface ScheduledDay {
   totalDwellMin: number;
   totalDistanceM: number;
   endTime: string;
+  /** Midnights crossed by the time the day ends. */
+  endDayOffset: number;
 }
 
 /**

@@ -97,6 +97,7 @@ export function buildSchedule(input: ScheduleInput): ScheduledDay {
       legFromPrevious: s.legFromPrevious,
       arrival: minutesToClock(arrivalMin),
       departure: minutesToClock(cursor),
+      dayOffset: Math.floor(arrivalMin / 1440),
       closedWarning: openingWarning(s.place, arrivalDate),
     };
   });
@@ -112,5 +113,6 @@ export function buildSchedule(input: ScheduleInput): ScheduledDay {
     totalDwellMin,
     totalDistanceM,
     endTime: minutesToClock(cursor),
+    endDayOffset: Math.floor(cursor / 1440),
   };
 }

@@ -246,7 +246,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         <dl className="grid grid-cols-3 gap-2 text-center">
           <Stat label="Travel" value={formatDuration(day.totalTravelSec)} icon={<ModeIcon className="h-3 w-3" />} />
           <Stat label="Distance" value={formatDistance(day.totalDistanceM)} />
-          <Stat label="Ends" value={day.endTime} />
+          <Stat
+            label="Ends"
+            value={day.endDayOffset > 0 ? `${day.endTime} +${day.endDayOffset}d` : day.endTime}
+          />
         </dl>
         {plan.days.length > 1 ? (
           <button
@@ -331,6 +334,14 @@ function SortableStop({
           <p className="truncate text-sm font-medium">{stop.place.name}</p>
           <p className="text-xs text-muted">
             {stop.arrival} – {stop.departure}
+            {stop.dayOffset > 0 ? (
+              <span
+                className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-medium text-amber-800"
+                title={`Arrives ${stop.dayOffset} day${stop.dayOffset > 1 ? "s" : ""} after this day starts`}
+              >
+                +{stop.dayOffset}d
+              </span>
+            ) : null}
           </p>
 
           <label className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">

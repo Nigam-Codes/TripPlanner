@@ -120,6 +120,7 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
             </span>
             <span className="text-muted">
               {day.startTime} – {day.endTime}
+              {day.endDayOffset > 0 ? ` (+${day.endDayOffset}d)` : ""}
             </span>
           </div>
 
@@ -153,7 +154,9 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
                         <span className="block text-xs text-muted">{s.place.localName}</span>
                       ) : null}
                       <span className="mt-0.5 block text-xs text-muted">
-                        {s.arrival} – {s.departure} · {categoryLabel(s.place.category)}
+                        {s.arrival} – {s.departure}
+                        {s.dayOffset > 0 ? ` (+${s.dayOffset}d)` : ""} ·{" "}
+                        {categoryLabel(s.place.category)}
                       </span>
                       {s.place.description ? (
                         <span className="mt-1 block line-clamp-3 text-xs text-muted">
@@ -187,7 +190,7 @@ export function SharedPlanView({ plan }: { plan: PlannedTrip }) {
             {[
               ["Travel", formatDuration(day.totalTravelSec)],
               ["Distance", formatDistance(day.totalDistanceM)],
-              ["Ends", day.endTime],
+              ["Ends", day.endDayOffset > 0 ? `${day.endTime} +${day.endDayOffset}d` : day.endTime],
             ].map(([label, value]) => (
               <div key={label} className="rounded-md bg-surface px-2 py-2">
                 <dt className="text-[10px] tracking-wide text-muted uppercase">{label}</dt>

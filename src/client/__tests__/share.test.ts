@@ -41,11 +41,13 @@ function day(stops: Place[], over: Partial<ScheduledDay> = {}): ScheduledDay {
       arrival: "09:00",
       departure: "09:30",
       closedWarning: null,
+      dayOffset: 0,
     })),
     totalTravelSec: 0,
     totalDwellMin: 0,
     totalDistanceM: 0,
     endTime: "12:00",
+    endDayOffset: 0,
     ...over,
   };
 }

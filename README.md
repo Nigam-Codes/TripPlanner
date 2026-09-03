@@ -50,6 +50,24 @@ instead of a circle. It defaults to driving, and "Optimize" reorders the middle 
 while letting you pin the start and the end, since a road trip usually has a fixed
 departure point and an open finish.
 
+Search covers whatever OpenStreetMap has a name for — national parks, lakes,
+reservoirs, waterfalls, peaks, trails, bridges, towers, towns and cities — and each
+result shows its type ("National park", "Lake", "Trail", "Peak", "Bridge") so you can
+tell the Angels Landing *peak* from the two residential streets of the same name. Plain
+roads sort below real features for exactly that reason.
+
+Long legs cross midnight easily, so any stop that lands on a later day is marked `+1d`
+rather than silently showing "03:14" as if it were the same morning.
+
+### Discovery vs labelling
+
+`CATEGORIES` in `src/lib/categories.ts` does double duty: `match` both builds the
+Overpass query and classifies the results, so the two cannot drift apart. Name search,
+though, returns feature classes that would be ruinous to query by radius —
+`highway=path` would drag in every footpath, `place=city` every hamlet — so those live
+in `classifyAlso`, which labels but never queries. A test asserts no label-only key ever
+reaches the Overpass query.
+
 ### Ranking
 
 OpenStreetMap has no ratings, so a raw radius query is an unranked pile in which a bus
@@ -107,7 +125,7 @@ NEXT_PUBLIC_BASE_PATH=/TripPlanner npm run build
 ```bash
 npm run dev      # dev server
 npm run build    # static export to out/
-npm test         # 37 unit tests
+npm test         # 58 unit tests
 ```
 
 ## Notes on the browser rewrite
