@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import MapGL, { Layer, Marker, NavigationControl, Source, type MapRef } from "react-map-gl/maplibre";
 import { setWorkerUrl } from "maplibre-gl";
+import { withBasePath } from "@/lib/basePath";
 import type { Feature, FeatureCollection, LineString } from "geojson";
 import { categoryColor } from "@/lib/categories";
 import type { Place, ScheduledDay } from "@/lib/types";
 
 // Must run before any Map is constructed; the bundled worker path does not
 // survive Next's bundling. See scripts/copy-maplibre-worker.mjs.
-setWorkerUrl("/maplibre-gl-worker.mjs");
+setWorkerUrl(withBasePath("/maplibre-gl-worker.mjs"));
 
 const STYLE_URL =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "https://tiles.openfreemap.org/styles/liberty";

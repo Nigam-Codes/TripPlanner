@@ -1,13 +1,16 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Map, ArrowRight } from "lucide-react";
 import { CitySearch } from "@/components/CitySearch";
-import { listTrips } from "@/server/trip/service";
+import { listTrips } from "@/client/store";
 import { formatDistance } from "@/lib/geo";
 
-export const dynamic = "force-dynamic";
-
 export default function Home() {
-  const trips = listTrips();
+  // localStorage is client-only, so the list fills in after hydration.
+  const [trips, setTrips] = useState<ReturnType<typeof listTrips>>([]);
+  useEffect(() => setTrips(listTrips()), []);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
@@ -36,7 +39,7 @@ export default function Home() {
             {trips.map((t) => (
               <li key={t.id}>
                 <Link
-                  href={`/plan/${t.id}`}
+                  href={`/plan/?id=${t.id}`}
                   className="flex items-center gap-3 px-4 py-3 transition hover:bg-canvas"
                 >
                   <span className="min-w-0 flex-1">
@@ -51,6 +54,9 @@ export default function Home() {
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-xs text-muted">
+            Trips are saved in this browser only — they are not synced between devices.
+          </p>
         </section>
       ) : null}
 
@@ -65,7 +71,7 @@ export default function Home() {
           OpenStreetMap contributors
         </a>{" "}
         (ODbL). Descriptions and images from Wikipedia (CC BY-SA). Routing by the FOSSGIS
-        OSRM service.
+        OSRM service. Basemap by OpenFreeMap.
       </footer>
     </main>
   );

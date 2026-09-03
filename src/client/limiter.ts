@@ -1,10 +1,18 @@
-import "server-only";
-
 /**
- * Per-host request gate. Public OSM services are donated infrastructure with
- * published limits; exceeding them gets an IP blocked, so every outbound call
- * routes through here.
+ * Per-host request gate, ported from the server build.
+ *
+ * The public OSM services are donated infrastructure with published limits, and those
+ * limits still apply when the requests come from a browser instead of a server.
+ *
+ * Two differences from the server version, both forced by the browser:
+ *
+ *  - `User-Agent` is a forbidden header in fetch and cannot be set from a page. The
+ *    server build sent one to identify the app; here the browser sends a `Referer`
+ *    automatically, which Nominatim's policy accepts as the alternative.
+ *  - Sending any custom header would turn these into preflighted CORS requests. The
+ *    Overpass POST is deliberately left as form-encoded so it stays a "simple request".
  */
+
 interface HostPolicy {
   minIntervalMs: number;
   maxConcurrent: number;
@@ -38,8 +46,7 @@ function stateFor(host: string) {
 function release(host: string) {
   const s = stateFor(host);
   s.active--;
-  const next = s.queue.shift();
-  if (next) next();
+  s.queue.shift()?.();
 }
 
 async function acquire(host: string): Promise<void> {
@@ -61,14 +68,9 @@ export interface FetchOptions extends RequestInit {
   retryOn429?: boolean;
 }
 
-/**
- * Rate-limited fetch that always identifies the app. Nominatim rejects generic
- * User-Agents outright, and the FOSSGIS services ask for an X-Client-Id.
- */
 export async function politeFetch(url: string, opts: FetchOptions = {}): Promise<Response> {
   const { timeoutMs = 90_000, retryOn429 = true, ...init } = opts;
-  const host = new URL(url).host;
-  const ua = process.env.NOMINATIM_USER_AGENT ?? "TripPlanner/0.1";
+  const host = new URL(url, location.href).host;
 
   await acquire(host);
   try {
@@ -76,16 +78,7 @@ export async function politeFetch(url: string, opts: FetchOptions = {}): Promise
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        return await fetch(url, {
-          ...init,
-          signal: ctrl.signal,
-          headers: {
-            "User-Agent": ua,
-            "X-Client-Id": ua,
-            "Accept-Language": "en",
-            ...(init.headers ?? {}),
-          },
-        });
+        return await fetch(url, { ...init, signal: ctrl.signal });
       } finally {
         clearTimeout(timer);
       }

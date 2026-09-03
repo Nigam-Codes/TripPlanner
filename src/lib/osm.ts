@@ -15,23 +15,33 @@ export interface OverpassElement {
  * Build the Overpass QL query straight from the category taxonomy, so adding a
  * category to CATEGORIES automatically extends both the query and the classifier.
  */
+/** Above this radius, unfiltered queries return truncated junk and take ~90s. */
+export const NOTABLE_ONLY_ABOVE_M = 25_000;
+
 export function buildOverpassQuery(
   lat: number,
   lon: number,
   radiusM: number,
   categoryIds: string[] = CATEGORIES.map((c) => c.id),
+  /**
+   * Restrict to features carrying a `wikidata` tag. At road-trip radii the
+   * unfiltered query hits the element cap and returns an arbitrary slice; requiring
+   * wikidata keeps the result both small and actually notable.
+   */
+  notableOnly = radiusM > NOTABLE_ONLY_ABOVE_M,
 ): string {
   const wanted = CATEGORIES.filter((c) => categoryIds.includes(c.id));
   const around = `around:${Math.round(radiusM)},${lat.toFixed(6)},${lon.toFixed(6)}`;
 
+  const notable = notableOnly ? '["wikidata"]' : "";
   const clauses: string[] = [];
   for (const cat of wanted) {
     for (const [key, values] of Object.entries(cat.match)) {
       if (values === true) {
-        clauses.push(`  nwr(${around})["${key}"]["name"];`);
+        clauses.push(`  nwr(${around})["${key}"]["name"]${notable};`);
       } else {
         const alt = values.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-        clauses.push(`  nwr(${around})["${key}"~"^(${alt})$"]["name"];`);
+        clauses.push(`  nwr(${around})["${key}"~"^(${alt})$"]["name"]${notable};`);
       }
     }
   }

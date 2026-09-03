@@ -2,22 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Copy, Check, X } from "lucide-react";
+import { ArrowLeft, Loader2, Copy, Check, X, AlertTriangle } from "lucide-react";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { PoiPanel, type SortKey } from "@/components/discover/PoiPanel";
 import { ItineraryPanel } from "@/components/trip/ItineraryPanel";
 import { CATEGORY_IDS } from "@/lib/categories";
+import { NOTABLE_ONLY_ABOVE_M } from "@/lib/osm";
 import { formatDistance, formatDuration } from "@/lib/geo";
+import { findPlaces } from "@/client/providers/places";
+import { enrichPlaces } from "@/client/providers/enrich";
+import { encodePlan } from "@/client/share";
+import { BASE_PATH } from "@/lib/basePath";
+import * as store from "@/client/store";
 import type { Mode, Place, PlannedTrip } from "@/lib/types";
 
-interface PlanResponse extends PlannedTrip {
-  share: { token: string; viewCount: number } | null;
-  savedSec?: number;
-}
+const MAX_RADIUS_M = 50_000;
 
-export function PlanDashboard({ initial }: { initial: PlanResponse }) {
-  const [plan, setPlan] = useState<PlanResponse>(initial);
-  const [radius, setRadius] = useState(initial.trip.radiusM);
+export function PlanDashboard({ tripId }: { tripId: string }) {
+  const [plan, setPlan] = useState<PlannedTrip | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  const [radius, setRadius] = useState(3000);
   const [categories, setCategories] = useState<string[]>(CATEGORY_IDS);
   const [sort, setSort] = useState<SortKey>("relevance");
   const [query, setQuery] = useState("");
@@ -26,18 +31,37 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeDayId, setActiveDayId] = useState(initial.days[0]?.dayId ?? "");
+  const [activeDayId, setActiveDayId] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  const { cityLat, cityLon } = plan.trip;
+  /* ------------------------------------------------------------------ loading */
+
+  const refresh = useCallback(async () => {
+    const next = await store.planTrip(tripId);
+    if (!next) {
+      setMissing(true);
+      return null;
+    }
+    setPlan(next);
+    setActiveDayId((cur) => (next.days.some((d) => d.dayId === cur) ? cur : next.days[0]?.dayId ?? ""));
+    return next;
+  }, [tripId]);
+
+  // localStorage is only readable on the client, so the trip loads after mount.
+  useEffect(() => {
+    void (async () => {
+      const loaded = await refresh();
+      if (loaded) setRadius(loaded.trip.radiusM);
+    })();
+  }, [refresh]);
 
   const day = useMemo(
-    () => plan.days.find((d) => d.dayId === activeDayId) ?? plan.days[0] ?? null,
-    [plan.days, activeDayId],
+    () => plan?.days.find((d) => d.dayId === activeDayId) ?? plan?.days[0] ?? null,
+    [plan, activeDayId],
   );
 
   const stopPlaceIds = useMemo(
@@ -47,31 +71,33 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
 
   /* ---------------------------------------------------------------- discovery */
 
-  // Debounced so dragging the radius slider does not fire an Overpass query per
-  // pixel — the public instance allows only two concurrent slots.
+  const cityLat = plan?.trip.cityLat;
+  const cityLon = plan?.trip.cityLon;
+
+  // Debounced so dragging the radius slider does not fire an Overpass query per pixel —
+  // the public instance allows only two concurrent slots.
   useEffect(() => {
-    const ctrl = new AbortController();
+    if (cityLat == null || cityLon == null) return;
+    let cancelled = false;
+
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
       try {
-        const url =
-          `/api/places?lat=${cityLat}&lon=${cityLon}&radius=${radius}` +
-          `&categories=${categories.join(",")}`;
-        const res = await fetch(url, { signal: ctrl.signal });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Search failed");
-        setPlaces(json.places as Place[]);
+        const found = await findPlaces(cityLat, cityLon, radius, categories);
+        if (cancelled) return;
+        setPlaces(found);
+        const ranked = await enrichPlaces(found);
+        if (!cancelled) setPlaces(ranked);
       } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Search failed");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Search failed");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 500);
 
     return () => {
-      ctrl.abort();
+      cancelled = true;
       clearTimeout(timer);
     };
   }, [cityLat, cityLon, radius, categories]);
@@ -80,8 +106,7 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
     const q = query.trim().toLowerCase();
     const filtered = q
       ? places.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) || (p.localName ?? "").toLowerCase().includes(q),
+          (p) => p.name.toLowerCase().includes(q) || (p.localName ?? "").toLowerCase().includes(q),
         )
       : places;
 
@@ -101,69 +126,77 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
     noticeTimer.current = setTimeout(() => setNotice(null), 5000);
   }, []);
 
-  const mutate = useCallback(
-    async (label: string, url: string, init: RequestInit) => {
+  /** Every mutation is synchronous against localStorage, then re-plans for new legs. */
+  const act = useCallback(
+    async (label: string, mutation: () => void | Promise<void>) => {
       setBusy(label);
       try {
-        const res = await fetch(url, {
-          ...init,
-          headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Request failed");
-        if (json.trip) setPlan(json as PlanResponse);
-        return json;
+        await mutation();
+        await refresh();
       } catch (err) {
-        flash(err instanceof Error ? err.message : "Request failed");
-        return null;
+        flash(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setBusy(null);
       }
     },
-    [flash],
+    [refresh, flash],
   );
-
-  const tripId = plan.trip.id;
 
   const addPlace = useCallback(
     (p: Place) => {
       if (!day) return;
-      void mutate("add", `/api/trips/${tripId}/stops`, {
-        method: "POST",
-        body: JSON.stringify({ dayId: day.dayId, place: p }),
-      });
+      void act("add", () => store.addStop(tripId, day.dayId, p));
     },
-    [day, mutate, tripId],
+    [act, day, tripId],
   );
 
   const optimize = useCallback(
     async (dayId: string) => {
-      const json = await mutate("optimize", `/api/trips/${tripId}/optimize`, {
-        method: "POST",
-        body: JSON.stringify({ dayId, mode: plan.trip.defaultMode }),
+      if (!plan) return;
+      let saved = 0;
+      await act("optimize", async () => {
+        ({ savedSec: saved } = await store.optimizeDay(tripId, dayId, plan.trip.defaultMode));
       });
-      if (json) {
-        flash(
-          json.savedSec > 0
-            ? `Reordered — saves ${formatDuration(json.savedSec)} of travel.`
-            : "Already the shortest order found.",
-        );
-      }
+      flash(
+        saved > 0
+          ? `Reordered — saves ${formatDuration(saved)} of travel.`
+          : "Already the shortest order found.",
+      );
     },
-    [mutate, tripId, plan.trip.defaultMode, flash],
+    [act, flash, plan, tripId],
   );
 
   const share = useCallback(async () => {
-    if (!plan.share) {
-      const json = await mutate("share", `/api/trips/${tripId}/share`, { method: "POST" });
-      if (json?.token) {
-        setPlan((p) => ({ ...p, share: { token: json.token, viewCount: 0 } }));
-      }
-    }
-    setShareOpen(true);
-  }, [plan.share, mutate, tripId]);
+    if (!plan) return;
+    const encoded = await encodePlan(plan);
+    setShareUrl(`${window.location.origin}${BASE_PATH}/s/#${encoded}`);
+  }, [plan]);
 
-  if (!day) return null;
+  /* ------------------------------------------------------------------- render */
+
+  if (missing) {
+    return (
+      <main className="mx-auto max-w-md p-16 text-center">
+        <p className="mb-2 font-medium">Trip not found</p>
+        <p className="mb-4 text-sm text-muted">
+          Trips are stored in this browser only, so a link from another device or a cleared
+          cache will not resolve.
+        </p>
+        <Link href="/" className="text-sm text-accent underline">
+          Back to all trips
+        </Link>
+      </main>
+    );
+  }
+
+  if (!plan || !day) {
+    return (
+      <main className="flex h-screen items-center justify-center gap-2 text-sm text-muted">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading trip…
+      </main>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -183,22 +216,24 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
           <input
             type="range"
             min={500}
-            max={20000}
+            max={MAX_RADIUS_M}
             step={500}
             value={radius}
             onChange={(e) => setRadius(Number(e.target.value))}
+            onPointerUp={() => store.updateTrip(tripId, { radiusM: radius })}
             className="w-32 accent-teal-600"
             aria-label="Search radius in metres"
           />
           <input
             type="number"
             min={0.5}
-            max={20}
+            max={MAX_RADIUS_M / 1000}
             step={0.5}
             value={radius / 1000}
             onChange={(e) =>
-              setRadius(Math.min(20000, Math.max(500, Number(e.target.value) * 1000)))
+              setRadius(Math.min(MAX_RADIUS_M, Math.max(500, Number(e.target.value) * 1000)))
             }
+            onBlur={() => store.updateTrip(tripId, { radiusM: radius })}
             className="w-16 rounded border border-line bg-surface px-1.5 py-1"
             aria-label="Search radius in kilometres"
           />
@@ -206,6 +241,14 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
         </label>
       </header>
+
+      {radius > NOTABLE_ONLY_ABOVE_M ? (
+        <p className="flex items-center justify-center gap-1.5 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          Beyond {formatDistance(NOTABLE_ONLY_ABOVE_M)}, only notable places are listed so the
+          search stays fast. For somewhere further out, use “Add a place by name”.
+        </p>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_1fr_360px]">
         <aside className="hidden min-h-0 border-r border-line bg-surface lg:block">
@@ -231,7 +274,7 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
 
         <div className="relative min-h-0">
           <MapCanvas
-            centre={{ lat: cityLat, lon: cityLon }}
+            centre={{ lat: plan.trip.cityLat, lon: plan.trip.cityLon }}
             radiusM={radius}
             places={visiblePlaces}
             day={day}
@@ -250,74 +293,35 @@ export function PlanDashboard({ initial }: { initial: PlanResponse }) {
             busy={busy}
             savedNotice={notice}
             onSelectDay={setActiveDayId}
-            onAddDay={() => void mutate("day", "/api/days", { method: "POST", body: JSON.stringify({ tripId }) })}
-            onRemoveDay={(dayId) =>
-              void mutate("day", `/api/days/${dayId}?tripId=${tripId}`, { method: "DELETE" })
-            }
+            onAddDay={() => void act("day", () => void store.addDay(tripId))}
+            onRemoveDay={(dayId) => void act("day", () => store.removeDay(tripId, dayId))}
             onSetStartTime={(dayId, startTime) =>
-              void mutate("day", `/api/days/${dayId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ tripId, startTime }),
-              })
+              void act("day", () => store.updateDay(tripId, dayId, { startTime }))
             }
-            onSetMode={(mode: Mode) =>
-              void mutate("mode", `/api/trips/${tripId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ defaultMode: mode }),
-              })
-            }
+            onSetMode={(mode: Mode) => void act("mode", () => store.updateTrip(tripId, { defaultMode: mode }))}
             onReorder={(dayId, stopIds) =>
-              void mutate("reorder", `/api/trips/${tripId}/reorder`, {
-                method: "POST",
-                body: JSON.stringify({ dayId, stopIds }),
-              })
+              void act("reorder", () => store.reorderStops(tripId, dayId, stopIds))
             }
-            onRemoveStop={(stopId) =>
-              void mutate("stop", `/api/stops/${stopId}?tripId=${tripId}`, { method: "DELETE" })
-            }
+            onRemoveStop={(stopId) => void act("stop", () => store.removeStop(tripId, stopId))}
             onSetDwell={(stopId, dwellMinutes) =>
-              void mutate("stop", `/api/stops/${stopId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ tripId, dwellMinutes }),
-              })
+              void act("stop", () => store.updateStop(tripId, stopId, { dwellMinutes }))
             }
             onOptimize={optimize}
             onShare={share}
             onHover={setHovered}
+            onAddPlace={addPlace}
           />
         </aside>
       </div>
 
-      {shareOpen && plan.share ? (
-        <ShareDialog
-          token={plan.share.token}
-          viewCount={plan.share.viewCount}
-          onClose={() => setShareOpen(false)}
-          onRevoke={async () => {
-            await mutate("share", `/api/trips/${tripId}/share`, { method: "DELETE" });
-            setPlan((p) => ({ ...p, share: null }));
-            setShareOpen(false);
-            flash("Share link revoked. The old link no longer works.");
-          }}
-        />
-      ) : null}
+      {shareUrl ? <ShareDialog url={shareUrl} onClose={() => setShareUrl(null)} /> : null}
     </div>
   );
 }
 
-function ShareDialog({
-  token,
-  viewCount,
-  onClose,
-  onRevoke,
-}: {
-  token: string;
-  viewCount: number;
-  onClose: () => void;
-  onRevoke: () => void;
-}) {
+
+function ShareDialog({ url, onClose }: { url: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window === "undefined" ? "" : `${window.location.origin}/s/${token}`;
 
   return (
     <div
@@ -328,7 +332,7 @@ function ShareDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-surface p-5 shadow-xl"
+        className="w-full max-w-lg rounded-xl bg-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between">
@@ -348,7 +352,7 @@ function ShareDialog({
             readOnly
             value={url}
             onFocus={(e) => e.currentTarget.select()}
-            className="min-w-0 flex-1 rounded-md border border-line bg-canvas px-3 py-2 text-sm"
+            className="min-w-0 flex-1 rounded-md border border-line bg-canvas px-3 py-2 text-xs"
           />
           <button
             onClick={async () => {
@@ -363,14 +367,10 @@ function ShareDialog({
           </button>
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-muted">
-          <span>
-            {viewCount} {viewCount === 1 ? "view" : "views"}
-          </span>
-          <button onClick={onRevoke} className="font-medium text-red-600 hover:underline">
-            Revoke link
-          </button>
-        </div>
+        <p className="mt-3 text-xs text-muted">
+          The whole plan is encoded in the link itself, so it keeps working without a server —
+          but it cannot be revoked, and editing the trip produces a new link.
+        </p>
       </div>
     </div>
   );

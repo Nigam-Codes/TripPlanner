@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, MapPin } from "lucide-react";
+import { geocode } from "@/client/providers/geocode";
+import { createTrip } from "@/client/store";
 import type { GeocodeResult } from "@/lib/types";
 
 /**
@@ -28,10 +30,7 @@ export function CitySearch() {
     setError(null);
     setResults(null);
     try {
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Search failed");
-      setResults(json.results as GeocodeResult[]);
+      setResults(await geocode(query));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {
@@ -42,14 +41,13 @@ export function CitySearch() {
   async function pick(r: GeocodeResult) {
     setCreating(r.displayName);
     try {
-      const res = await fetch("/api/trips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cityName: r.name, cityLat: r.lat, cityLon: r.lon, radiusM: 3000 }),
+      const id = createTrip({
+        cityName: r.name,
+        cityLat: r.lat,
+        cityLon: r.lon,
+        radiusM: 3000,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Could not create trip");
-      router.push(`/plan/${json.id}`);
+      router.push(`/plan/?id=${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create trip");
       setCreating(null);

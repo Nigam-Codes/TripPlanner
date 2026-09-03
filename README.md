@@ -1,10 +1,13 @@
 # Trip Planner
 
-Search a city, set a radius, browse the sights inside it, and build a day-by-day
-itinerary with real walking / cycling / driving times — then publish it as a
-read-only page anyone can open.
+Search a city, set a radius, browse the sights inside it, add destinations hours away by
+name, and build a day-by-day itinerary with real walking / cycling / driving times — then
+share it as a read-only page.
 
-Built entirely on free OpenStreetMap services. **No API keys, no billing account.**
+Runs entirely in the browser on free OpenStreetMap services. **No server, no database, no
+API keys, no accounts.**
+
+**Live:** https://nigam-codes.github.io/TripPlanner/
 
 ## Quick start
 
@@ -12,97 +15,126 @@ Built entirely on free OpenStreetMap services. **No API keys, no billing account
 npm install
 ```
 
-Set a real contact address in `.env.local` before first run — Nominatim blocks
-generic User-Agents, and a placeholder will get the IP banned:
-
-```
-NOMINATIM_USER_AGENT="TripPlanner/0.1 (you@example.com)"
-```
-
-```bash
-npm run db:push
-```
-
 ```bash
 npm run dev
 ```
-
-Then open http://localhost:3000.
 
 ## How it works
 
 | Concern | Service | Notes |
 |---|---|---|
 | City search | Nominatim | 1 req/s, **autocomplete is forbidden**, so search runs on submit only |
-| Places | Overpass | 2 slots/IP — results cached 7 days, single-flighted |
+| Places nearby | Overpass | 2 slots/IP — results cached 7 days in IndexedDB, single-flighted |
+| Places by name | Nominatim | Any distance; `extratags=1` returns the wikidata id so enrichment still works |
 | Descriptions & photos | Wikipedia / Wikidata | Batched; ~4 requests to enrich 80 places |
 | Routing | FOSSGIS OSRM | Separate `routed-foot` / `routed-bike` / `routed-car` engines |
 | Basemap | OpenFreeMap | Vector tiles, no key |
-| Storage | SQLite (`data/tripplanner.db`) | Created by `npm run db:push` |
+| Storage | localStorage + IndexedDB | Trips in localStorage; API responses in IndexedDB |
+
+### Two ways to add a stop
+
+**Within ~50 km — browse by radius.** The dashboard lists everything touristy inside the
+circle, ranked.
+
+**Anywhere further — search by name.** Radius discovery does not scale: an unfiltered
+Overpass query at 400 km takes ~90 s *and* still truncates at the element cap, so it
+returns an arbitrary slice rather than the best places. Above 25 km the app automatically
+restricts to places carrying a `wikidata` tag (i.e. notable ones), which is what keeps a
+50 km search at ~13 s. Beyond that, name the place instead — "Add a place by name" has no
+distance limit at all, so a stop 5–6 hours away is one search.
 
 ### Ranking
 
-OpenStreetMap has no ratings, so a raw radius query is an unranked pile in which a
-bus shelter outranks a cathedral. Places are scored on tag prominence (Wikipedia
-and Wikidata links, core tourism tags, area vs. node), the top ~80 are enriched,
-and the list is then re-sorted by **Wikidata sitelink count** — how many language
-Wikipedias cover the subject — which is a good, cheaply-batched fame proxy.
+OpenStreetMap has no ratings, so a raw radius query is an unranked pile in which a bus
+shelter outranks a cathedral. Places are scored on tag prominence (Wikipedia and Wikidata
+links, core tourism tags, area vs. node), the top ~80 are enriched, and the list is then
+re-sorted by **Wikidata sitelink count** — how many language Wikipedias cover the subject —
+a good, cheaply-batched fame proxy.
 
 ### Why not the OSRM demo server
 
-`router.project-osrm.org` serves the **car profile only**. It returns HTTP 200 for
-`/foot/` and `/bike/` and gives identical car durations for all three, so a
-walking-first planner built on it would silently show driving times labelled
-"walking". The FOSSGIS instances run a separate graph per mode; the profile
-segment in the URL path is always the literal `driving` and the *host* selects the
-mode.
+`router.project-osrm.org` serves the **car profile only**. It answers HTTP 200 for
+`/foot/` and `/bike/` and returns identical car durations for all three, so a
+walking-first planner built on it would silently show driving times labelled "walking".
+The FOSSGIS instances run a separate graph per mode; the profile segment in the URL path
+is always the literal `driving` and the *host* selects the mode.
 
-Valhalla was evaluated first (it would also have given isochrones) but
-`valhalla1.openstreetmap.de` was unreachable during development. `ors.ts`
-implements the same interface as an opt-in fallback:
+### Share links
 
+There is no server, so a plan travels inside the URL fragment. To keep links short it
+stores **identity, not content**: ids and coordinates only. The viewer's browser re-fetches
+descriptions and photos from Wikidata/Wikipedia and re-routes the legs via OSRM. A 3-stop
+trip encodes to ~370 characters; 20 stops stays under 2 000.
+
+The fragment never reaches GitHub's servers. The trade-off is that links **cannot be
+revoked or updated** — editing a trip produces a new link.
+
+## Deploying
+
+The site is a static export deployed from the `gh-pages` branch.
+
+```bash
+npm run deploy
 ```
-ROUTING_PROVIDER=ors
-ORS_API_KEY=<free key, no card>
+
+That builds with `NEXT_PUBLIC_BASE_PATH=/TripPlanner` and pushes `out/` to `gh-pages`.
+
+Three things silently break a Next static export on GitHub Pages, all handled here:
+
+1. **`public/.nojekyll`** — without it, Pages' Jekyll step ignores the `_next/` directory
+   (leading underscore) and every asset 404s.
+2. **`basePath`** — a project site lives under `/<repo>/`, so `basePath` and `assetPrefix`
+   come from `NEXT_PUBLIC_BASE_PATH`, defaulting to `""` for local dev.
+3. **The maplibre worker URL must include the basePath** — see below.
+
+> On Windows, Git Bash rewrites a leading `/` into a Windows path. `npm run deploy` sets
+> `MSYS_NO_PATHCONV=1` to prevent `/TripPlanner` becoming `C:/Program Files/Git/TripPlanner`.
+
+### Optional: deploy on push via Actions
+
+`.github/workflows/deploy.yml` is included but pushing it requires the `workflow` OAuth
+scope, which a default `gh auth login` does not grant:
+
+```bash
+gh auth refresh -s workflow
 ```
 
-### Shared plans work offline
-
-Stops reference permanently-stored `places` rows and routed legs are persisted in
-`route_cache`, so `/s/<token>` renders entirely from the database. Verified: with
-Overpass, Nominatim and the routers all pointed at an unreachable host, the share
-page still returns 200 in ~80 ms with every name, time, total and description
-intact. A shared plan cannot break because a POI changed upstream or Overpass
-rate-limited you.
-
-Links are unguessable 22-character tokens, `noindex`, and revocable.
+Then push the file and set Pages → Source → GitHub Actions.
 
 ## Scripts
 
 ```bash
 npm run dev      # dev server
-npm run build    # production build
-npm test         # 29 unit tests: query building, dedupe, optimizer, scheduler
-npm run db:push  # apply the schema
+npm run build    # static export to out/
+npm run deploy   # build with basePath and publish to gh-pages
+npm test         # 37 unit tests
 ```
 
-## A note on the map worker
+## Notes on the browser rewrite
 
-`scripts/copy-maplibre-worker.mjs` (wired to `predev`/`prebuild`) copies
-maplibre's worker and its shared chunk into `public/`. maplibre resolves its
-worker relative to `import.meta.url`; once Next bundles the library that sibling
-path no longer exists, the request falls through to the HTML 404 page, and the
-browser rejects it for having a `text/html` MIME type. The map then renders
-markers but never a single tile. `setWorkerUrl()` in `MapCanvas.tsx` points at the
-copied file.
+This started as a Next.js server with API routes and SQLite (see the first commit). Moving
+it into the browser surfaced three things worth recording:
+
+- **Wikipedia and Wikidata send no `Access-Control-Allow-Origin` header unless the request
+  carries `origin=*`.** Without it the browser blocks the response and descriptions, images
+  *and* the popularity ranking vanish silently.
+- **Overpass rejects browser User-Agents with HTTP 406** unless a `Referer` is present.
+  Browsers send one automatically on cross-origin requests, so this works — but never set
+  a `no-referrer` policy on the page, or discovery breaks everywhere at once.
+- **`User-Agent` cannot be set from `fetch`.** The server build identified itself that way;
+  the browser build relies on the `Referer` instead, which both Nominatim and Overpass
+  accept.
+
+`src/lib/**` (query building, dedupe, optimizer, scheduler) stayed completely unchanged
+through the rewrite, along with its tests.
 
 ## Attribution
 
-Place data © OpenStreetMap contributors (ODbL). Descriptions and images from
-Wikipedia (CC BY-SA). Routing by the FOSSGIS OSRM service. Basemap by OpenFreeMap
-/ OpenMapTiles. These credits are rendered on every map and share page and are a
-licensing requirement, not decoration.
+Place data © OpenStreetMap contributors (ODbL). Descriptions and images from Wikipedia
+(CC BY-SA). Routing by the FOSSGIS OSRM service. Basemap by OpenFreeMap / OpenMapTiles.
+These credits are rendered on every map and share page and are a licensing requirement,
+not decoration.
 
-All upstreams are donated infrastructure on a best-effort basis. Every outbound
-request is rate-limited and identified in `src/server/limiter.ts`; please keep it
+All upstreams are donated infrastructure on a best-effort basis. Every outbound request is
+rate-limited in `src/client/limiter.ts` and cached in `src/client/cache.ts`; please keep it
 that way.

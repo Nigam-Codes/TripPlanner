@@ -1,9 +1,8 @@
-import "server-only";
 import { getOrFetch, DAY_MS } from "../cache";
 import { politeFetch } from "../limiter";
 import type { GeocodeResult } from "@/lib/types";
 
-const BASE = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
+const BASE = process.env.NEXT_PUBLIC_NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 
 interface NominatimRow {
   name?: string;
@@ -18,9 +17,9 @@ interface NominatimRow {
 /**
  * City search against Nominatim.
  *
- * Nominatim's usage policy forbids type-ahead autocomplete, so this is only ever
- * called on explicit submit. Results cache for 30 days — repeated identical
- * queries are treated as faulty clients and get blocked.
+ * Their policy forbids implementing autocomplete against the public API, so this only
+ * ever runs on an explicit submit. Results cache for 30 days — clients repeating the
+ * same query are treated as faulty and blocked.
  */
 export async function geocode(query: string): Promise<GeocodeResult[]> {
   const q = query.trim().toLowerCase();
@@ -34,19 +33,16 @@ export async function geocode(query: string): Promise<GeocodeResult[]> {
     const res = await politeFetch(url, { timeoutMs: 20_000 });
 
     if (res.status === 403) {
-      // Nominatim rejects generic User-Agents and placeholder contacts alike --
-      // anything containing example.com comes back 403 rather than a rate-limit
-      // message, which is easy to misread as the service being down.
       throw new Error(
-        "Nominatim rejected the request (403). Set NOMINATIM_USER_AGENT in .env.local " +
-          "to identify this app with a real contact URL or email — placeholder " +
-          "addresses such as example.com are blocked.",
+        "Nominatim rejected this request (403). Their public API blocks unidentified " +
+          "clients; if this persists, the site may need its own geocoding provider.",
       );
     }
     if (res.status === 429) {
-      throw new Error("Nominatim is rate-limiting this IP. Wait a moment and search again.");
+      throw new Error("Nominatim is rate-limiting you. Wait a moment and search again.");
     }
     if (!res.ok) throw new Error(`Nominatim returned ${res.status}`);
+
     const rows = (await res.json()) as NominatimRow[];
 
     return rows.map((r): GeocodeResult => {

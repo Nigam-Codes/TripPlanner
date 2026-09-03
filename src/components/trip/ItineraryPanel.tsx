@@ -30,8 +30,9 @@ import {
   Bike,
   Car,
 } from "lucide-react";
+import { AddPlaceSearch } from "./AddPlaceSearch";
 import { formatDistance, formatDuration } from "@/lib/geo";
-import { MODE_LABEL, MODES, type Mode, type PlannedTrip, type ScheduledDay } from "@/lib/types";
+import { MODE_LABEL, MODES, type Mode, type Place, type PlannedTrip, type ScheduledDay } from "@/lib/types";
 
 const MODE_ICON: Record<Mode, typeof Footprints> = { foot: Footprints, bike: Bike, car: Car };
 
@@ -51,6 +52,7 @@ export interface ItineraryPanelProps {
   onOptimize: (dayId: string) => void;
   onShare: () => void;
   onHover: (placeId: string | null) => void;
+  onAddPlace: (place: Place) => void;
 }
 
 export function ItineraryPanel(props: ItineraryPanelProps) {
@@ -168,8 +170,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-3">
         {day.stops.length === 0 ? (
-          <p className="p-8 text-center text-sm text-muted">
-            No stops yet. Add places from the list on the left, or click a dot on the map.
+          <p className="px-4 py-8 text-center text-sm text-muted">
+            No stops yet. Add places from the list on the left, click a dot on the map, or
+            search for somewhere by name below.
           </p>
         ) : (
           <DndContext
@@ -198,6 +201,13 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             </SortableContext>
           </DndContext>
         )}
+
+        <div className="mt-2">
+          <AddPlaceSearch
+            origin={{ lat: plan.trip.cityLat, lon: plan.trip.cityLon }}
+            onAdd={props.onAddPlace}
+          />
+        </div>
       </div>
 
       <div className="shrink-0 border-t border-line bg-surface p-4">

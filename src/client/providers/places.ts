@@ -1,11 +1,10 @@
-import 'server-only';
-import { getOrFetch, DAY_MS } from '../cache';
-import { politeFetch } from '../limiter';
-import { CATEGORIES } from '@/lib/categories';
-import { buildOverpassQuery, normalizeElements, type OverpassElement } from '@/lib/osm';
-import type { Place } from '@/lib/types';
+import { getOrFetch, DAY_MS } from "../cache";
+import { politeFetch } from "../limiter";
+import { CATEGORIES } from "@/lib/categories";
+import { buildOverpassQuery, normalizeElements, type OverpassElement } from "@/lib/osm";
+import type { Place } from "@/lib/types";
 
-const BASE = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter';
+const BASE = process.env.NEXT_PUBLIC_OVERPASS_URL ?? "https://overpass-api.de/api/interpreter";
 
 export async function findPlaces(
   lat: number,
@@ -19,14 +18,16 @@ export async function findPlaces(
 
   return getOrFetch(key, 7 * DAY_MS, async () => {
     const query = buildOverpassQuery(lat, lon, radiusM, cats);
+
+    // Form-encoded POST with no custom headers stays a CORS "simple request",
+    // so the browser skips the preflight entirely.
     const res = await politeFetch(BASE, {
       method: "POST",
       body: new URLSearchParams({ data: query }),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       timeoutMs: 120_000,
     });
 
-    if (res.status === 429) throw new Error("Overpass is rate-limiting this IP. Try again shortly.");
+    if (res.status === 429) throw new Error("Overpass is rate-limiting you. Try again shortly.");
     if (res.status === 504) throw new Error("Overpass timed out. Try a smaller radius.");
     if (!res.ok) throw new Error(`Overpass returned ${res.status}`);
 

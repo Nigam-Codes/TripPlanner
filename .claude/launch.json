@@ -4,8 +4,37 @@
     {
       "name": "trip-planner",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "static-build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "serve",
+        "out",
+        "-p",
+        "4000",
+        "-L"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "static-basepath",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--yes",
+        "serve",
+        ".preview",
+        "-p",
+        "4001",
+        "-L"
+      ],
+      "port": 4001
     }
   ]
 }
