@@ -1,0 +1,72 @@
+import Link from "next/link";
+import { Map, ArrowRight } from "lucide-react";
+import { CitySearch } from "@/components/CitySearch";
+import { listTrips } from "@/server/trip/service";
+import { formatDistance } from "@/lib/geo";
+
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  const trips = listTrips();
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-16">
+      <header className="mb-10">
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1 text-sm font-medium text-accent">
+          <Map className="h-4 w-4" aria-hidden />
+          Trip Planner
+        </div>
+        <h1 className="text-4xl font-semibold tracking-tight text-balance">
+          Find what is worth seeing, then plan the route between it.
+        </h1>
+        <p className="mt-3 text-lg text-muted">
+          Search a city, choose how far you are willing to roam, and build a day-by-day
+          itinerary with real walking, cycling and driving times.
+        </p>
+      </header>
+
+      <CitySearch />
+
+      {trips.length > 0 ? (
+        <section className="mt-14">
+          <h2 className="mb-3 text-sm font-semibold tracking-wide text-muted uppercase">
+            Your trips
+          </h2>
+          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
+            {trips.map((t) => (
+              <li key={t.id}>
+                <Link
+                  href={`/plan/${t.id}`}
+                  className="flex items-center gap-3 px-4 py-3 transition hover:bg-canvas"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{t.title}</span>
+                    <span className="block text-sm text-muted">
+                      {t.cityName} · {t.stopCount} {t.stopCount === 1 ? "stop" : "stops"} ·{" "}
+                      {formatDistance(t.radiusM)} radius
+                    </span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <footer className="mt-16 text-xs leading-relaxed text-muted">
+        Place data ©{" "}
+        <a
+          className="underline"
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer"
+        >
+          OpenStreetMap contributors
+        </a>{" "}
+        (ODbL). Descriptions and images from Wikipedia (CC BY-SA). Routing by the FOSSGIS
+        OSRM service.
+      </footer>
+    </main>
+  );
+}
